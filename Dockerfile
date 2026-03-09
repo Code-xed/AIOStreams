@@ -1,8 +1,10 @@
-FROM node:24-slim AS base
+FROM node:22.12.0-slim AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+
 RUN corepack enable
+RUN corepack prepare pnpm@10.15.0 --activate
 
 FROM base AS builder
 
@@ -32,7 +34,6 @@ COPY packages/frontend ./packages/frontend
 COPY scripts ./scripts
 COPY resources ./resources
 
-
 # Build the project.
 RUN pnpm run build
 
@@ -44,12 +45,10 @@ RUN rm -rf packages/frontend/node_modules
 
 RUN pnpm install --prod --frozen-lockfile
 
-
 FROM builder AS runtime
 WORKDIR /runtime
 
 # Copy the built files from the builder.
-# The package.json files must be copied as well for NPM workspace symlinks between local packages to work.
 COPY --from=builder /build/package*.json /build/LICENSE ./
 COPY --from=builder /build/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /build/pnpm-lock.yaml ./pnpm-lock.yaml
@@ -85,6 +84,7 @@ COPY --from=runtime /runtime /app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD ["/nodejs/bin/node", "/app/scripts/healthcheck.js"]
+
 EXPOSE ${PORT:-3000}
 
 CMD ["/app/packages/server/dist/server.js"]
