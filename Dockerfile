@@ -3,8 +3,8 @@ FROM node:22.12.0-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-RUN corepack enable
-RUN corepack prepare pnpm@10.15.0 --activate
+RUN npm install -g pnpm@10.15.0
+
 
 FROM base AS builder
 
@@ -13,7 +13,7 @@ WORKDIR /build
 # Copy LICENSE file.
 COPY LICENSE ./
 
-# Copy the relevant package.json and package-lock.json files.
+# Copy the relevant package files.
 COPY package*.json ./
 COPY packages/server/package*.json ./packages/server/
 COPY packages/core/package*.json ./packages/core/
@@ -27,17 +27,16 @@ RUN pnpm install --frozen-lockfile
 
 # Copy source files.
 COPY tsconfig.*json ./
-
 COPY packages/server ./packages/server
 COPY packages/core ./packages/core
 COPY packages/frontend ./packages/frontend
 COPY scripts ./scripts
 COPY resources ./resources
 
-# Build the project.
+# Build project
 RUN pnpm run build
 
-# Remove development dependencies.
+# Remove dev dependencies
 RUN rm -rf node_modules
 RUN rm -rf packages/core/node_modules
 RUN rm -rf packages/server/node_modules
@@ -45,10 +44,12 @@ RUN rm -rf packages/frontend/node_modules
 
 RUN pnpm install --prod --frozen-lockfile
 
+
 FROM builder AS runtime
+
 WORKDIR /runtime
 
-# Copy the built files from the builder.
+# Copy build artifacts
 COPY --from=builder /build/package*.json /build/LICENSE ./
 COPY --from=builder /build/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /build/pnpm-lock.yaml ./pnpm-lock.yaml
@@ -69,17 +70,19 @@ COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/packages/core/node_modules ./packages/core/node_modules
 COPY --from=builder /build/packages/server/node_modules ./packages/server/node_modules
 
-FROM gcr.io/distroless/nodejs24-debian12 AS production
+
+FROM gcr.io/distroless/nodejs22-debian12 AS production
 
 LABEL org.opencontainers.image.title="AIOStreams"
 LABEL org.opencontainers.image.source="https://github.com/Viren070/AIOStreams"
-LABEL org.opencontainers.image.description="AIOStreams consolidates multiple Stremio addons and debrid services - including its own suite of built-in addons - into a single, highly customisable super-addon."
+LABEL org.opencontainers.image.description="AIOStreams consolidates multiple Stremio addons and debrid services into a single customizable addon."
 LABEL org.opencontainers.image.licenses="GPL-3.0"
 
 WORKDIR /app
 
 COPY --from=busybox:1.36.0-uclibc /bin/wget /bin/wget
 COPY --from=busybox:1.36.0-uclibc /bin/sh /bin/sh
+
 COPY --from=runtime /runtime /app
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
